@@ -1,0 +1,21 @@
+{
+    "description": "Utility bill analyzer for extracting consumption data",
+    "scenario": "document",
+    "config": {
+      "returnDetails": true
+    },
+    "fieldSchema": {
+      "fields": {
+        "BillingPeriod": {
+          "type": "string",
+          "method": "extract",
+          "description": "Month and year of the billing period"
+        },
+        "ElectricityConsumption": {
+          "type": "number",
+          "method": "extract",
+          "description": "Total electricity consumption in kWh for the billing period"
+        }
+      }
+    }
+}
