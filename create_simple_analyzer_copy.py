@@ -12,7 +12,7 @@ def main():
         endpoint="https://esg-ai477291929312.cognitiveservices.azure.com",
         api_version="2024-12-01-preview",
         subscription_key="1c094f97ba6d4679abdc37e918911b39",
-        analyzer_id="multi-period-analyzer",  # New analyzer ID
+        analyzer_id="utility-bill-analyzer-copy",  # New analyzer ID
     )
     
     client = AzureContentUnderstandingClient(
@@ -22,59 +22,23 @@ def main():
         token_provider=settings.token_provider,
     )
     
-    # Load the multi-period analyzer definition
-    with open("multi_period_request.json", "r") as f:
+    # Load the original working analyzer definition
+    with open("request_body.json", "r") as f:
         analyzer_definition = json.load(f)
     
-    # Print the request for debugging
-    print("Creating analyzer with the following configuration:")
-    print(json.dumps(analyzer_definition, indent=2))
-    
     # Create the analyzer
-    try:
-        response = client.create_analyzer(settings.analyzer_id, analyzer_definition)
-        print(f"Multi-period analyzer creation started. Operation URL: {response.headers.get('operation-location')}")
-        
-        # Wait for analyzer creation to complete
-        result = client.poll_result(
-            response,
-            timeout_seconds=60 * 5,
-            polling_interval_seconds=2,
-        )
-        
-        print("Multi-period analyzer creation result:")
-        json.dump(result, sys.stdout, indent=2)
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP Error: {e}")
-        print(f"Response status code: {e.response.status_code}")
-        print(f"Response text: {e.response.text}")
-        try:
-            error_details = e.response.json()
-            print("Error details:")
-            json.dump(error_details, sys.stdout, indent=2)
-        except:
-            print("Could not parse error response as JSON")
-        
-        # Try with a "base analyzer" field
-        print("\nTrying with baseAnalyzerId field...")
-        analyzer_definition["baseAnalyzerId"] = "prebuilt-document"
-        try:
-            response = client.create_analyzer(settings.analyzer_id, analyzer_definition)
-            print(f"Multi-period analyzer creation started with baseAnalyzerId. Operation URL: {response.headers.get('operation-location')}")
-            
-            # Wait for analyzer creation to complete
-            result = client.poll_result(
-                response,
-                timeout_seconds=60 * 5,
-                polling_interval_seconds=2,
-            )
-            
-            print("Multi-period analyzer creation result:")
-            json.dump(result, sys.stdout, indent=2)
-        except requests.exceptions.HTTPError as e2:
-            print(f"Second attempt also failed. HTTP Error: {e2}")
-            print(f"Response status code: {e2.response.status_code}")
-            print(f"Response text: {e2.response.text}")
+    response = client.create_analyzer(settings.analyzer_id, analyzer_definition)
+    print(f"Analyzer copy creation started. Operation URL: {response.headers.get('operation-location')}")
+    
+    # Wait for analyzer creation to complete
+    result = client.poll_result(
+        response,
+        timeout_seconds=60 * 5,
+        polling_interval_seconds=2,
+    )
+    
+    print("Analyzer copy creation result:")
+    json.dump(result, sys.stdout, indent=2)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -154,12 +118,20 @@ class AzureContentUnderstandingClient:
         url = f"{self._endpoint}/contentunderstanding/analyzers/{analyzer_id}?api-version={self._api_version}"
         self._logger.info(f"Creating analyzer: {analyzer_id}")
         
+        # Print the request for debugging
+        print(f"URL: {url}")
+        print(f"Headers: {headers}")
+        print(f"Request body: {json.dumps(analyzer_definition, indent=2)}")
+        
         response = requests.put(
             url=url,
             headers=headers,
             json=analyzer_definition,
         )
 
+        print(f"Response status: {response.status_code}")
+        print(f"Response body: {response.text}")
+        
         response.raise_for_status()
         return response
 

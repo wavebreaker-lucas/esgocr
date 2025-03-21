@@ -39,26 +39,41 @@ def main():
     print("\nAnalysis Results:")
     json.dump(result, sys.stdout, indent=2)
     
-    # Extract and display just the extracted fields
+    # Extract and display the extracted fields
     if result.get("status") == "Succeeded" and "result" in result:
         try:
             fields = result["result"]["contents"][0]["fields"]
             print("\n\nExtracted Information:")
             
-            # Extract billing data array
-            if "BillingData" in fields and "valueArray" in fields["BillingData"]:
-                billing_data = fields["BillingData"]["valueArray"]
-                print(f"Found {len(billing_data)} billing periods:")
+            # Extract standard single fields
+            billing_period = fields.get("BillingPeriod", {}).get("valueString", "Not found")
+            consumption = fields.get("ElectricityConsumption", {}).get("valueNumber", "Not found")
+            
+            print(f"Primary Billing Period: {billing_period}")
+            print(f"Primary Electricity Consumption: {consumption} kWh")
+            
+            # Extract multiple billing periods from the generated field
+            if "MultipleBillingPeriods" in fields and "valueString" in fields["MultipleBillingPeriods"]:
+                multiple_periods_str = fields["MultipleBillingPeriods"]["valueString"]
+                print("\nMultiple Billing Periods:")
+                print(multiple_periods_str)
                 
-                for i, period_data in enumerate(billing_data, 1):
-                    period_obj = period_data.get("valueObject", {})
-                    billing_period = period_obj.get("BillingPeriod", {}).get("valueString", "Not found")
-                    consumption = period_obj.get("ElectricityConsumption", {}).get("valueNumber", "Not found")
-                    print(f"\nPeriod {i}:")
-                    print(f"  Billing Period: {billing_period}")
-                    print(f"  Electricity Consumption: {consumption} kWh")
+                # Try to parse as JSON
+                try:
+                    multiple_periods = json.loads(multiple_periods_str)
+                    if isinstance(multiple_periods, list) and multiple_periods:
+                        print(f"\nFound {len(multiple_periods)} billing periods:")
+                        for i, period in enumerate(multiple_periods, 1):
+                            print(f"\nPeriod {i}:")
+                            if isinstance(period, dict):
+                                for key, value in period.items():
+                                    print(f"  {key}: {value}")
+                            else:
+                                print(f"  {period}")
+                except json.JSONDecodeError:
+                    print("\nCould not parse multiple billing periods as JSON")
             else:
-                print("No billing data array found. The analyzer might not have found multiple billing periods.")
+                print("\nNo multiple billing periods found")
                 
         except (KeyError, IndexError) as e:
             print(f"\nError parsing results: {e}")
