@@ -19,7 +19,7 @@
         "MultipleBillingPeriods": {
           "type": "string",
           "method": "generate",
-          "description": "List all billing periods and their consumption values found in this document in JSON format"
+          "description": "Generate a JSON array containing all billing periods and their consumption values found in this document. Each item should be an object with exactly two fields: 'period' (string date in format DD/MM/YYYY) and 'consumption' (number). Example: [{\"period\":\"01/01/2023\",\"consumption\":150.5},{\"period\":\"01/02/2023\",\"consumption\":145.2}]"
         }
       }
     }

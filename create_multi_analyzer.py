@@ -26,8 +26,26 @@ def main():
     with open("multi_period_request.json", "r") as f:
         analyzer_definition = json.load(f)
     
-    # Print the request for debugging
-    print("Creating analyzer with the following configuration:")
+    # First, delete the analyzer if it exists
+    try:
+        print(f"Checking if analyzer '{settings.analyzer_id}' exists and deleting it...")
+        response = client.delete_analyzer(settings.analyzer_id)
+        # Delete is synchronous and returns 204 No Content on success
+        print(f"Delete operation completed successfully. Status code: {response.status_code}")
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            print(f"Analyzer '{settings.analyzer_id}' doesn't exist yet. Proceeding to create it.")
+        else:
+            print(f"Error deleting analyzer: {e}")
+            print(f"Response status code: {e.response.status_code}")
+            print(f"Response text: {e.response.text}")
+            print("Continuing with create operation anyway...")
+    
+    # Make sure field schema has a name (required by API)
+    if "fieldSchema" in analyzer_definition and "name" not in analyzer_definition["fieldSchema"]:
+        analyzer_definition["fieldSchema"]["name"] = "UtilityBillSchema"
+    
+    print("\nCreating analyzer with the following configuration:")
     print(json.dumps(analyzer_definition, indent=2))
     
     # Create the analyzer
@@ -44,8 +62,14 @@ def main():
         
         print("Multi-period analyzer creation result:")
         json.dump(result, sys.stdout, indent=2)
+        
+        if result.get("status") == "ready":
+            print("\nAnalyzer created successfully and is ready for use!")
+        else:
+            print(f"\nAnalyzer creation completed with status: {result.get('status')}")
+            
     except requests.exceptions.HTTPError as e:
-        print(f"HTTP Error: {e}")
+        print(f"HTTP Error creating analyzer: {e}")
         print(f"Response status code: {e.response.status_code}")
         print(f"Response text: {e.response.text}")
         try:
@@ -54,27 +78,6 @@ def main():
             json.dump(error_details, sys.stdout, indent=2)
         except:
             print("Could not parse error response as JSON")
-        
-        # Try with a "base analyzer" field
-        print("\nTrying with baseAnalyzerId field...")
-        analyzer_definition["baseAnalyzerId"] = "prebuilt-document"
-        try:
-            response = client.create_analyzer(settings.analyzer_id, analyzer_definition)
-            print(f"Multi-period analyzer creation started with baseAnalyzerId. Operation URL: {response.headers.get('operation-location')}")
-            
-            # Wait for analyzer creation to complete
-            result = client.poll_result(
-                response,
-                timeout_seconds=60 * 5,
-                polling_interval_seconds=2,
-            )
-            
-            print("Multi-period analyzer creation result:")
-            json.dump(result, sys.stdout, indent=2)
-        except requests.exceptions.HTTPError as e2:
-            print(f"Second attempt also failed. HTTP Error: {e2}")
-            print(f"Response status code: {e2.response.status_code}")
-            print(f"Response text: {e2.response.text}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -162,6 +165,31 @@ class AzureContentUnderstandingClient:
 
         response.raise_for_status()
         return response
+        
+    def delete_analyzer(self, analyzer_id: str):
+        """
+        Deletes an existing analyzer with the specified ID.
+        This is a synchronous operation that returns a 204 No Content status code on success.
+
+        Args:
+            analyzer_id (str): The ID of the analyzer to delete.
+
+        Returns:
+            Response: The response from the delete analyzer request.
+
+        Raises:
+            HTTPError: If the HTTP request returned an unsuccessful status code.
+        """
+        url = f"{self._endpoint}/contentunderstanding/analyzers/{analyzer_id}?api-version={self._api_version}"
+        self._logger.info(f"Deleting analyzer: {analyzer_id}")
+        
+        response = requests.delete(
+            url=url,
+            headers=self._headers,
+        )
+
+        response.raise_for_status()
+        return response
 
     def _get_headers(
         self, subscription_key: str | None, api_token: str | None, x_ms_useragent: str
@@ -196,7 +224,7 @@ class AzureContentUnderstandingClient:
         while True:
             elapsed_time = time.time() - start_time
             self._logger.info(
-                "Waiting for service response", extra={"elapsed": elapsed_time}
+                f"Waiting for service response (elapsed: {elapsed_time:.2f}s)"
             )
             if elapsed_time > timeout_seconds:
                 raise TimeoutError(
@@ -207,7 +235,7 @@ class AzureContentUnderstandingClient:
             response.raise_for_status()
             result = response.json()
             status = result.get("status", "").lower()
-            if status == "succeeded":
+            if status == "succeeded" or status == "ready":
                 self._logger.info(
                     f"Request result is ready after {elapsed_time:.2f} seconds."
                 )

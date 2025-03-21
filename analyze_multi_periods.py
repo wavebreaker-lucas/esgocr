@@ -1,8 +1,10 @@
 import json
 import logging
 import sys
+import os
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, List, Dict
+from pathlib import Path
 
 import requests
 
@@ -10,6 +12,10 @@ import requests
 def main():
     # Sample URL to analyze - replace with your utility bill URL
     file_url = "https://raw.githubusercontent.com/wavebreaker-lucas/esgocr/main/utility_bills/HKE1.png"
+    
+    # Output directory for results
+    results_dir = "analysis_results"
+    os.makedirs(results_dir, exist_ok=True)
     
     settings = Settings(
         endpoint="https://esg-ai477291929312.cognitiveservices.azure.com",
@@ -25,6 +31,10 @@ def main():
         token_provider=settings.token_provider,
     )
     
+    # Get filename from URL for output naming
+    file_basename = os.path.basename(file_url)
+    file_name = os.path.splitext(file_basename)[0]
+    
     # Analyze the document
     response = client.begin_analyze(settings.analyzer_id, file_url)
     print(f"Analysis started. Operation URL: {response.headers.get('operation-location')}")
@@ -36,14 +46,17 @@ def main():
         polling_interval_seconds=2,
     )
     
-    print("\nAnalysis Results:")
-    json.dump(result, sys.stdout, indent=2)
+    # Save complete raw results
+    raw_results_path = os.path.join(results_dir, f"{file_name}_raw_results.json")
+    with open(raw_results_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+    print(f"\nComplete raw results saved to: {raw_results_path}")
     
     # Extract and display the extracted fields
     if result.get("status") == "Succeeded" and "result" in result:
         try:
             fields = result["result"]["contents"][0]["fields"]
-            print("\n\nExtracted Information:")
+            print("\nExtracted Information:")
             
             # Extract standard single fields
             billing_period = fields.get("BillingPeriod", {}).get("valueString", "Not found")
@@ -53,31 +66,74 @@ def main():
             print(f"Primary Electricity Consumption: {consumption} kWh")
             
             # Extract multiple billing periods from the generated field
+            billing_data = []
+            
             if "MultipleBillingPeriods" in fields and "valueString" in fields["MultipleBillingPeriods"]:
                 multiple_periods_str = fields["MultipleBillingPeriods"]["valueString"]
-                print("\nMultiple Billing Periods:")
-                print(multiple_periods_str)
                 
                 # Try to parse as JSON
                 try:
                     multiple_periods = json.loads(multiple_periods_str)
                     if isinstance(multiple_periods, list) and multiple_periods:
                         print(f"\nFound {len(multiple_periods)} billing periods:")
+                        
+                        standardized_data = []
                         for i, period in enumerate(multiple_periods, 1):
-                            print(f"\nPeriod {i}:")
                             if isinstance(period, dict):
-                                for key, value in period.items():
-                                    print(f"  {key}: {value}")
-                            else:
-                                print(f"  {period}")
+                                # Convert to our standard format
+                                standardized_period = {
+                                    "period": period.get("period", period.get("請表日期", "Unknown")),
+                                    "consumption": parse_consumption(period.get("consumption", period.get("用電度數", "0")))
+                                }
+                                
+                                standardized_data.append(standardized_period)
+                                
+                                print(f"\nPeriod {i}:")
+                                print(f"  Date: {standardized_period['period']}")
+                                print(f"  Consumption: {standardized_period['consumption']} kWh")
+                                
+                        # Save standardized data
+                        if standardized_data:
+                            standardized_path = os.path.join(results_dir, f"{file_name}_periods.json")
+                            with open(standardized_path, "w", encoding="utf-8") as f:
+                                json.dump(standardized_data, f, indent=2, ensure_ascii=False)
+                            print(f"\nStandardized billing data saved to: {standardized_path}")
+                    else:
+                        print("\nNo billing periods found in the extracted data.")
+                        
                 except json.JSONDecodeError:
-                    print("\nCould not parse multiple billing periods as JSON")
+                    print("\nCould not parse multiple billing periods as JSON. Raw output:")
+                    print(multiple_periods_str)
             else:
                 print("\nNo multiple billing periods found")
                 
         except (KeyError, IndexError) as e:
             print(f"\nError parsing results: {e}")
             print("Could not find the expected fields in the response.")
+
+
+def parse_consumption(consumption_str):
+    """Convert various consumption string formats to a numeric value"""
+    if isinstance(consumption_str, (int, float)):
+        return consumption_str
+    
+    # Remove thousand separators and other non-numeric characters except decimal point
+    if isinstance(consumption_str, str):
+        # Remove commas, spaces, and other separators
+        numeric_str = consumption_str.replace(',', '').replace(' ', '')
+        
+        # Try to extract just the numeric part if there are other characters
+        import re
+        numeric_match = re.search(r'[-+]?\d*\.?\d+', numeric_str)
+        if numeric_match:
+            numeric_str = numeric_match.group(0)
+            
+        try:
+            return float(numeric_str)
+        except ValueError:
+            pass
+            
+    return 0  # Default if parsing fails
 
 
 @dataclass(frozen=True, kw_only=True)
