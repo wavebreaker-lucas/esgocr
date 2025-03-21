@@ -2,26 +2,30 @@
     "description": "Multi-period utility bill analyzer for extracting consumption data",
     "scenario": "document",
     "config": {
+      "enableOcr": true,
+      "enableLayout": true,
       "returnDetails": true
     },
     "fieldSchema": {
+      "name": "UtilityBillExtractor",
+      "description": "Schema for extracting multiple billing periods from utility bills",
       "fields": {
-        "BillingData": {
+        "BillingPeriods": {
           "type": "array",
           "method": "extract",
-          "description": "Array of billing periods and their corresponding consumption values",
-          "itemSchema": {
-            "type": "object",
-            "properties": {
-              "BillingPeriod": {
-                "type": "string",
-                "description": "Month and year of the billing period"
-              },
-              "ElectricityConsumption": {
-                "type": "number",
-                "description": "Total electricity consumption in kWh for the billing period"
-              }
-            }
+          "description": "List of billing periods (month and year)",
+          "items": {
+            "type": "string",
+            "description": "A single billing period"
+          }
+        },
+        "ElectricityConsumptions": {
+          "type": "array",
+          "method": "extract",
+          "description": "List of electricity consumption values in kWh",
+          "items": {
+            "type": "number",
+            "description": "A single electricity consumption value in kWh"
           }
         }
       }
