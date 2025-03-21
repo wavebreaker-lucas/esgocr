@@ -9,7 +9,7 @@ import requests
 
 def main():
     # Sample URL to analyze - replace with your utility bill URL
-    file_url = "https://github.com/Azure-Samples/cognitive-services-REST-api-samples/raw/master/curl/form-recognizer/rest-api/invoice.pdf"
+    file_url = "https://raw.githubusercontent.com/wavebreaker-lucas/esgocr/main/utility_bills/10月电费.jpg"
     
     settings = Settings(
         endpoint="https://esg-ai477291929312.cognitiveservices.azure.com",
